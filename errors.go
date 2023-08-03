@@ -216,10 +216,15 @@ func Wrap(err error, message string) *StackError {
 	if err == nil {
 		return nil
 	}
+
+	errCode := ErrCodeNotDefined
+	if cErr, ok := err.(interface{ Code() int }); ok {
+		errCode = cErr.Code()
+	}
 	err = &CauseMsgCodeError{
 		cause: err,
 		msg:   message,
-		code:  ErrCodeNotDefined,
+		code:  errCode,
 	}
 	return &StackError{
 		err,
@@ -234,10 +239,15 @@ func Wrapf(err error, format string, args ...interface{}) *StackError {
 	if err == nil {
 		return nil
 	}
+
+	errCode := ErrCodeNotDefined
+	if cErr, ok := err.(interface{ Code() int }); ok {
+		errCode = cErr.Code()
+	}
 	err = &CauseMsgCodeError{
 		cause: err,
 		msg:   fmt.Sprintf(format, args...),
-		code:  ErrCodeNotDefined,
+		code:  errCode,
 	}
 	return &StackError{
 		err,
@@ -251,10 +261,16 @@ func WithMessage(err error, message string) *CauseMsgCodeError {
 	if err == nil {
 		return nil
 	}
+
+	errCode := ErrCodeNotDefined
+	if cErr, ok := err.(interface{ Code() int }); ok {
+		errCode = cErr.Code()
+	}
+
 	return &CauseMsgCodeError{
 		cause: err,
 		msg:   message,
-		code:  ErrCodeFailed,
+		code:  errCode,
 	}
 }
 
@@ -264,10 +280,16 @@ func WithMessagef(err error, format string, args ...interface{}) *CauseMsgCodeEr
 	if err == nil {
 		return nil
 	}
+
+	errCode := ErrCodeNotDefined
+	if cErr, ok := err.(interface{ Code() int }); ok {
+		errCode = cErr.Code()
+	}
+
 	return &CauseMsgCodeError{
 		cause: err,
 		msg:   fmt.Sprintf(format, args...),
-		code:  ErrCodeFailed,
+		code:  errCode,
 	}
 }
 
