@@ -22,7 +22,7 @@ func TestNew(t *testing.T) {
 	for _, tt := range tests {
 		got := New(tt.err)
 		if got.Error() != tt.want.Error() {
-			t.Errorf("New.Error(): got: %q, want %q", got, tt.want)
+			t.Errorf("New.MsgCodeErr(): got: %q, want %q", got, tt.want)
 		}
 	}
 }
