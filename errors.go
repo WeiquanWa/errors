@@ -99,8 +99,8 @@ import (
 
 // New returns an error with the supplied message.
 // New also records the stack trace at the point it was called.
-func New(message string) error {
-	return &fundamental{
+func New(message string) *MsgCodeErr {
+	return &MsgCodeErr{
 		msg:   message,
 		code:  ErrCodeNotDefined,
 		stack: callers(),
@@ -110,88 +110,91 @@ func New(message string) error {
 // Errorf formats according to a format specifier and returns the string
 // as a value that satisfies error.
 // Errorf also records the stack trace at the point it was called.
-func Errorf(format string, args ...interface{}) error {
-	return &fundamental{
+func Errorf(format string, args ...interface{}) *MsgCodeErr {
+	return &MsgCodeErr{
 		msg:   fmt.Sprintf(format, args...),
 		stack: callers(),
 	}
 }
 
-// fundamental is an error that has a message and a stack, but no caller.
-type fundamental struct {
+// MsgCodeErr is an error that has a message and a stack, but no caller.
+type MsgCodeErr struct {
 	code int
 	msg  string
 	*stack
 }
 
-// Error implements the error interface.
-func (f *fundamental) Error() string { return f.msg }
+// MsgCodeErr implements the error interface.
+func (f *MsgCodeErr) Error() string { return f.msg }
 
 // Format implements fmt.Formatter.
-func (f *fundamental) Format(s fmt.State, verb rune) {
+func (f *MsgCodeErr) Format(s fmt.State, verb rune) {
 	switch verb {
 	case 'v':
 		if s.Flag('+') {
-			io.WriteString(s, f.msg)
+			_, _ = io.WriteString(s, f.msg)
 			f.stack.Format(s, verb)
 			return
 		}
 		fallthrough
 	case 's':
-		io.WriteString(s, f.msg)
+		_, _ = io.WriteString(s, f.msg)
 	case 'q':
-		fmt.Fprintf(s, "%q", f.msg)
+		_, _ = fmt.Fprintf(s, "%q", f.msg)
 	}
 }
 
 // Code returns the error code.
-func (f *fundamental) Code() int { return f.code }
+func (f *MsgCodeErr) Code() int { return f.code }
 
 // SetCode sets the error code.
-func (f *fundamental) SetCode(code int) { f.code = code }
+func (f *MsgCodeErr) SetCode(code int) error {
+	f.code = code
+	return f
+}
 
 // WithStack annotates err with a stack trace at the point WithStack was called.
 // If err is nil, WithStack returns nil.
-func WithStack(err error) error {
+func WithStack(err error) *StackError {
 	if err == nil {
 		return nil
 	}
-	return &withStack{
+	return &StackError{
 		err,
 		callers(),
 	}
 }
 
-type withStack struct {
+type StackError struct {
 	error
 	*stack
 }
 
 // Cause returns the underlying cause of the error
-func (w *withStack) Cause() error { return w.error }
+func (w *StackError) Cause() error { return w.error }
 
 // Unwrap provides compatibility for Go 1.13 error chains.
-func (w *withStack) Unwrap() error { return w.error }
+func (w *StackError) Unwrap() error { return w.error }
 
 // Format implements fmt.Formatter.
-func (w *withStack) Format(s fmt.State, verb rune) {
+func (w *StackError) Format(s fmt.State, verb rune) {
 	switch verb {
 	case 'v':
 		if s.Flag('+') {
-			fmt.Fprintf(s, "%+v", w.Cause())
+			_, _ = fmt.Fprintf(s, "%+v", w.Cause())
 			w.stack.Format(s, verb)
 			return
 		}
 		fallthrough
 	case 's':
-		io.WriteString(s, w.Error())
+		_, _ = io.WriteString(s, w.Error())
 	case 'q':
-		fmt.Fprintf(s, "%q", w.Error())
+		_, _ = fmt.Fprintf(s, "%q", w.Error())
 	}
 }
 
 // Code returns the error code, if defined.
-func (w *withStack) Code() int {
+func (w *StackError) Code() int {
 	if err, ok := w.error.(interface{ Code() int }); ok {
 		return err.Code()
 	}
@@ -199,25 +202,26 @@ func (w *withStack) Code() int {
 }
 
 // SetCode sets the error code, if defined.
-func (w *withStack) SetCode(code int) {
-	if err, ok := w.error.(interface{ SetCode(int) }); ok {
-		err.SetCode(code)
+func (w *StackError) SetCode(code int) error {
+	if err, ok := w.error.(interface{ SetCode(int) error }); ok {
+		_ = err.SetCode(code)
 	}
+	return w
 }
 
 // Wrap returns an error annotating err with a stack trace
 // at the point Wrap is called, and the supplied message.
 // If err is nil, Wrap returns nil.
-func Wrap(err error, message string) error {
+func Wrap(err error, message string) *StackError {
 	if err == nil {
 		return nil
 	}
-	err = &withMessage{
+	err = &CauseMsgCodeError{
 		cause: err,
 		msg:   message,
 		code:  ErrCodeNotDefined,
 	}
-	return &withStack{
+	return &StackError{
 		err,
 		callers(),
 	}
@@ -226,16 +230,16 @@ func Wrap(err error, message string) error {
 // Wrapf returns an error annotating err with a stack trace
 // at the point Wrapf is called, and the format specifier.
 // If err is nil, Wrapf returns nil.
-func Wrapf(err error, format string, args ...interface{}) error {
+func Wrapf(err error, format string, args ...interface{}) *StackError {
 	if err == nil {
 		return nil
 	}
-	err = &withMessage{
+	err = &CauseMsgCodeError{
 		cause: err,
 		msg:   fmt.Sprintf(format, args...),
 		code:  ErrCodeNotDefined,
 	}
-	return &withStack{
+	return &StackError{
 		err,
 		callers(),
 	}
@@ -243,11 +247,11 @@ func Wrapf(err error, format string, args ...interface{}) error {
 
 // WithMessage annotates err with a new message.
 // If err is nil, WithMessage returns nil.
-func WithMessage(err error, message string) error {
+func WithMessage(err error, message string) *CauseMsgCodeError {
 	if err == nil {
 		return nil
 	}
-	return &withMessage{
+	return &CauseMsgCodeError{
 		cause: err,
 		msg:   message,
 		code:  ErrCodeFailed,
@@ -256,53 +260,54 @@ func WithMessage(err error, message string) error {
 
 // WithMessagef annotates err with the format specifier.
 // If err is nil, WithMessagef returns nil.
-func WithMessagef(err error, format string, args ...interface{}) error {
+func WithMessagef(err error, format string, args ...interface{}) *CauseMsgCodeError {
 	if err == nil {
 		return nil
 	}
-	return &withMessage{
+	return &CauseMsgCodeError{
 		cause: err,
 		msg:   fmt.Sprintf(format, args...),
 		code:  ErrCodeFailed,
 	}
 }
 
-type withMessage struct {
+type CauseMsgCodeError struct {
 	cause error
 	code  int
 	msg   string
 }
 
-// Error implements the error interface.
-func (w *withMessage) Error() string { return w.msg + ": " + w.cause.Error() }
+// MsgCodeErr implements the error interface.
+func (w *CauseMsgCodeError) Error() string { return w.msg + ": " + w.cause.Error() }
 
 // Cause returns the underlying cause of the error.
-func (w *withMessage) Cause() error { return w.cause }
+func (w *CauseMsgCodeError) Cause() error { return w.cause }
 
 // Unwrap provides compatibility for Go 1.13 error chains.
-func (w *withMessage) Unwrap() error { return w.cause }
+func (w *CauseMsgCodeError) Unwrap() error { return w.cause }
 
 // Format implements fmt.Formatter.
-func (w *withMessage) Format(s fmt.State, verb rune) {
+func (w *CauseMsgCodeError) Format(s fmt.State, verb rune) {
 	switch verb {
 	case 'v':
 		if s.Flag('+') {
-			fmt.Fprintf(s, "%+v\n", w.Cause())
-			io.WriteString(s, w.msg)
+			_, _ = fmt.Fprintf(s, "%+v\n", w.Cause())
+			_, _ = io.WriteString(s, w.msg)
 			return
 		}
 		fallthrough
 	case 's', 'q':
-		io.WriteString(s, w.Error())
+		_, _ = io.WriteString(s, w.Error())
 	}
 }
 
 // Code returns the error code.
-func (w *withMessage) Code() int { return w.code }
+func (w *CauseMsgCodeError) Code() int { return w.code }
 
 // SetCode sets the error code.
-func (w *withMessage) SetCode(code int) {
+func (w *CauseMsgCodeError) SetCode(code int) error {
 	w.code = code
+	return w
 }
 
 // Cause returns the underlying cause of the error, if possible.
