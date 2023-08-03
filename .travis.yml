@@ -2,10 +2,14 @@ arch:
   - amd64
   
 language: go
-go_import_path: github.com/pkg/errors
+go_import_path: github.com/WeiquanWa/errors
 go:
-  - 1.14
-  - 1.15
+  - "1.14"
+  - "1.15"
+  - "1.16"
+  - "1.17"
+  - "1.18"
+  - "1.19"
   - tip
 
 script:
